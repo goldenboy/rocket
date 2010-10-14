@@ -23,8 +23,11 @@ import MySQLdb as db
 
 from daemon import Service
 from common import *
-from key import SECRET_KEY
 
+try:
+    from key import SECRET_KEY
+except ImportError:
+    raise Exception("Please create a file rocket/key.py with a secret key (see key.template.py)")
 
 import_config = "from config import *"
 

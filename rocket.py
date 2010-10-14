@@ -21,7 +21,10 @@ from google.appengine.api import datastore, datastore_types, datastore_errors
 from google.appengine.ext import webapp
 from google.appengine.ext.webapp.util import run_wsgi_app
 
-from rocket.key import SECRET_KEY
+try:
+    from rocket.key import SECRET_KEY
+except ImportError:
+    raise Exception("Please create a file rocket/key.py with a secret key (see key.template.py)")
 
 from rocket.common import *
 
