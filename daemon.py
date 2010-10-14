@@ -1,3 +1,5 @@
+#!/usr/bin/env python
+#
 # Copyright 2010 Kaspars Dancis
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
