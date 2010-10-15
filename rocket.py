@@ -22,6 +22,7 @@ from google.appengine.ext import webapp
 from google.appengine.ext.webapp.util import run_wsgi_app
 
 from rocket.common import *
+import json
 
 
 
@@ -66,27 +67,19 @@ class Rocket(webapp.RequestHandler):
     def get(self):    
         path = self.request.path.split("/")
                 
-        self.response.headers['Content-Type'] = 'text/xml'
+        self.response.headers['Content-Type'] = 'application/json'
             
         if len(path) < 3 or path[2] == '': 
             return self.bad_request("Please specify an entity kind")
         
         kind = path[2]
     
-        self.response.out.write(u'<?xml version="1.0" encoding="UTF-8"?>\n')    
-        self.response.out.write(u'<updates>\n')
+        updates = []
         
         query = datastore.Query(kind)
         
-        timestamp_field = self.request.get("timestamp")
-        if not timestamp_field:
-            timestamp_field = DEFAULT_TIMESTAMP_FIELD        
-       
-        batch_size = self.request.get("count")
-        if not batch_size:
-            batch_size = DEFAULT_BATCH_SIZE
-        else:
-            batch_size = int(batch_size)
+        timestamp_field = self.request.get("timestamp")       
+        batch_size = int(self.request.get("count"))
             
         f = self.request.get("from") 
         if f: 
@@ -97,16 +90,22 @@ class Rocket(webapp.RequestHandler):
         entities = query.Get(batch_size, 0)
         
         for entity in entities:
-            self.response.out.write(u'    <%s key="%s">\n' % (kind, ae_to_rocket(TYPE_KEY, entity.key())))
+            update = {
+                "key": ae_to_rocket(TYPE_KEY, entity.key()),
+            }
             
             for field, value in entity.items():
                 if isinstance(value, list):
                     if len(value) > 0 and value[0] != None:
                         field_type = get_type(value[0])
-                        self.response.out.write(u'        <%s type="%s" list="true">\n' % (field, field_type))
+                        update[field] = {
+                            "type": field_type,
+                            "list": True,
+                            "value": [],
+                        }
+                        
                         for item in value:
-                            self.response.out.write(u"            <item>%s</item>\n" % ae_to_rocket(field_type, item))                    
-                        self.response.out.write(u'</%s>\n' % field)
+                            update[field]["value"].append(ae_to_rocket(field_type, item))
                 else:
                     if value != None:  
                         if field == timestamp_field:
@@ -114,11 +113,16 @@ class Rocket(webapp.RequestHandler):
                         else:
                             field_type = get_type(value)
                         
-                        self.response.out.write(u'        <%s type="%s">%s</%s>\n' % (field, field_type, ae_to_rocket(field_type, value), field))                
-    
-            self.response.out.write(u'    </%s>\n' % kind)
-                
-        self.response.out.write(u'</updates>')
+                        update[field] = {
+                            "type": field_type,
+                            "value": ae_to_rocket(field_type, value), 
+                        }                
+                        
+            updates.append(update)
+                        
+        self.response.out.write(json.dumps({"updates": updates}))
+        
+        
         
         
     def post(self):
