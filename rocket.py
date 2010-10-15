@@ -21,14 +21,7 @@ from google.appengine.api import datastore, datastore_types, datastore_errors
 from google.appengine.ext import webapp
 from google.appengine.ext.webapp.util import run_wsgi_app
 
-try:
-    from rocket.key import SECRET_KEY
-except ImportError:
-    raise Exception("Please create a file rocket/key.py with a secret key (see key.template.py)")
-
 from rocket.common import *
-
-CHANGE_THIS = "change_this"
 
 
 
@@ -74,12 +67,6 @@ class Rocket(webapp.RequestHandler):
         path = self.request.path.split("/")
                 
         self.response.headers['Content-Type'] = 'text/xml'
-
-        if SECRET_KEY == CHANGE_THIS:
-            return self.unauthorized("Please change the default secret key in key.py")
-        
-        if self.request.get("secret_key") !=  SECRET_KEY:
-            return self.unauthorized() 
             
         if len(path) < 3 or path[2] == '': 
             return self.bad_request("Please specify an entity kind")
@@ -139,12 +126,6 @@ class Rocket(webapp.RequestHandler):
         
         self.response.headers['Content-Type'] = 'text/plain'
 
-        if SECRET_KEY == CHANGE_THIS:
-            return self.unauthorized("Please change the default secret key in key.py")        
-        
-        if self.request.get("secret_key") !=  SECRET_KEY:
-            return self.unauthorized()
-        
         if len(path) < 3 or path[2] == '': 
             return self.bad_request(u'Please specify an entity kind\n')
         
