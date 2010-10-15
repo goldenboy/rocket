@@ -26,6 +26,13 @@ import json
 
 
 
+SQLITE_INTEGER = "integer"
+SQLITE_REAL = "real"
+SQLITE_TEXT = "text"
+SQLITE_BLOB = "blob"
+
+
+
 class Rocket(webapp.RequestHandler):
     
     def unauthorized(self, error = None):
@@ -91,36 +98,20 @@ class Rocket(webapp.RequestHandler):
         
         for entity in entities:
             update = {
-                "key": ae_to_rocket(TYPE_KEY, entity.key()),
+                "key": get_sqllite_value(entity.key()),
             }
             
-            for field, value in entity.items():
-                if isinstance(value, list):
-                    if len(value) > 0 and value[0] != None:
-                        field_type = get_type(value[0])
-                        update[field] = {
-                            "type": field_type,
-                            "list": True,
-                            "value": [],
-                        }
-                        
-                        for item in value:
-                            update[field]["value"].append(ae_to_rocket(field_type, item))
-                else:
-                    if value != None:  
-                        if field == timestamp_field:
-                            field_type = TYPE_TIMESTAMP
-                        else:
-                            field_type = get_type(value)
-                        
-                        update[field] = {
-                            "type": field_type,
-                            "value": ae_to_rocket(field_type, value), 
-                        }                
+            for field, value in entity.items():                        
+                update[field] = {
+                    "type": get_sqllite_type(value),
+                    "value": get_sqllite_value(value), 
+                }                
                         
             updates.append(update)
                         
-        self.response.out.write(json.dumps({"updates": updates}))
+        res = json.dumps({"updates": updates})
+        
+        self.response.out.write(res)
         
         
         
@@ -197,51 +188,42 @@ class Rocket(webapp.RequestHandler):
 
 
 
-
-def get_type(value):
-    if isinstance(value, datetime):
-        return TYPE_DATETIME
-    elif isinstance(value, bool):
-        return TYPE_BOOL
-    elif isinstance(value, long):
-        return TYPE_LONG
+def get_sqllite_type(value):
+    if isinstance(value, bool) or isinstance(value, long) or isinstance(value, int):
+        return SQLITE_INTEGER
     elif isinstance(value, float):
-        return TYPE_FLOAT
-    elif isinstance(value, int):
-        return TYPE_INT
-    elif isinstance(value, datastore_types.Text):
-        return TYPE_TEXT
-    elif isinstance(value, datastore_types.Key):
-        return TYPE_REFERENCE
+        return SQLITE_REAL
     elif isinstance(value, datastore_types.Blob):
-        return TYPE_BLOB
+        return SQLITE_BLOB
     else:
-        return TYPE_STR
-                
-    return None
+        return SQLITE_TEXT
 
 
 
-def ae_to_rocket(field_type, ae_value):
-    if ae_value == None:
-        rocket_value = ""
-    elif field_type == TYPE_DATETIME or field_type == TYPE_TIMESTAMP:
-        rocket_value = to_iso(ae_value)
-    elif field_type == TYPE_REFERENCE:
-        rocket_value = "%s/%s" % (ae_value.kind(), ae_to_rocket(TYPE_KEY, ae_value))
-    elif field_type == TYPE_KEY:
-        if ae_value.name():
-            rocket_value = escape(ae_value.name())
-        else:
-            rocket_value = "%d" % ae_value.id()
-    elif field_type == TYPE_BOOL:
-        rocket_value = "%d" % ae_value
-    elif field_type == TYPE_BLOB:
-        rocket_value = base64.b64encode(ae_value)
+def get_sqllite_value(value):
+    # DATETIME
+    if isinstance(value, datetime):
+        return to_iso(value)
+    
+    # BOOL
+    elif isinstance(value, bool):
+        return int("%d" % value)
+    
+    # KEY
+    elif isinstance(value, datastore_types.Key):
+        return value.id_or_name()
+    
+    # LIST
+    if isinstance(value, list):
+        return "|".join(value)
+    
+    # KEY
+    elif isinstance(value, datastore_types.Blob):
+        return base64.b64encode(value)
+    
+    # ALL OTHERS
     else:
-        rocket_value = escape(u"%s" % ae_value)
-        
-    return rocket_value
+        return value
 
 
 
