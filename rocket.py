@@ -98,7 +98,10 @@ class Rocket(webapp.RequestHandler):
         
         for entity in entities:
             update = {
-                "key": get_sqllite_value(entity.key()),
+                "key": {
+                    "type": get_sqllite_type(entity.key()),
+                    "value": get_sqllite_value(entity.key()),
+                }
             }
             
             for field, value in entity.items():                        
