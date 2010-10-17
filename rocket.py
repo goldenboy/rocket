@@ -22,7 +22,7 @@ from google.appengine.ext import webapp
 from google.appengine.ext.webapp.util import run_wsgi_app
 
 from rocket.common import *
-import json
+import json, yaml
 
 
 
@@ -34,6 +34,33 @@ SQLITE_BLOB = "blob"
 
 
 class Rocket(webapp.RequestHandler):
+    
+    def get_config(self):
+        if not self.config:
+            self.config = yaml.load("rocket.yaml")
+            
+            self.query_filter = None
+            if self.config.has_key("query_filter"):                
+                query_filter_name = self.config.has_key("query_filter") 
+                try:
+                    i = query_filter_name.rfind('.')
+                    if i <= 0:
+                        raise Exception("Config error: query_filter - no module specified")
+                                                    
+                    p = query_filter_name[:i]
+                    m = query_filter_name[i+1:]
+                    
+                    exec "from %s import %s as query_filter" % (p, m) in locals()
+                    
+                    self.query_filter = query_filter
+                except Exception, e:
+                    raise Exception("Config error: cannot import query_filter - %s", e)
+            else:
+                raise Exception("Config error: query_filter must be specified", e)                
+            
+        return self.config
+    
+    
     
     def unauthorized(self, error = None):
         self.error(403)
@@ -91,6 +118,9 @@ class Rocket(webapp.RequestHandler):
         f = self.request.get("from") 
         if f: 
             query['%s >' % timestamp_field] = from_iso(f)
+            
+        self.get_config() # to ensure query_filter is imported
+        self.query_filter(self.request, query)
     
         query.Order(timestamp_field)
             
