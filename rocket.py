@@ -14,7 +14,7 @@
 
 
 
-import logging, base64
+import logging, base64, os
 
 from google.appengine.api import datastore, datastore_types, datastore_errors
 
@@ -36,12 +36,12 @@ SQLITE_BLOB = "blob"
 class Rocket(webapp.RequestHandler):
     
     def get_config(self):
-        if not self.config:
-            self.config = yaml.load("rocket.yaml")
-            
+        if not hasattr(self, "config"):
+            rocket_yaml = os.path.join(os.path.dirname(os.path.abspath(os.path.dirname(__file__))), "rocket.yaml")
+            self.config = yaml.load(file(rocket_yaml, "r"))
             self.query_filter = None
             if self.config.has_key("query_filter"):                
-                query_filter_name = self.config.has_key("query_filter") 
+                query_filter_name = self.config["query_filter"] 
                 try:
                     i = query_filter_name.rfind('.')
                     if i <= 0:
@@ -54,9 +54,9 @@ class Rocket(webapp.RequestHandler):
                     
                     self.query_filter = query_filter
                 except Exception, e:
-                    raise Exception("Config error: cannot import query_filter - %s", e)
+                    raise Exception("Config error: cannot import query_filter - %s" % e.message)
             else:
-                raise Exception("Config error: query_filter must be specified", e)                
+                raise Exception("Config error: query_filter must be specified")    
             
         return self.config
     
@@ -120,7 +120,7 @@ class Rocket(webapp.RequestHandler):
             query['%s >' % timestamp_field] = from_iso(f)
             
         self.get_config() # to ensure query_filter is imported
-        self.query_filter(self.request, query)
+        self.query_filter(self.request, kind, query)
     
         query.Order(timestamp_field)
             
