@@ -14,7 +14,7 @@
 
 
 
-import logging, base64, os
+import logging, base64, os, datetime, time
 
 from google.appengine.api import datastore, datastore_types, datastore_errors
 
@@ -118,7 +118,7 @@ class Rocket(webapp.RequestHandler):
             
         f = self.request.get("from") 
         if f: 
-            query['%s >' % timestamp_field] = from_iso(f)
+            query['%s >= ' % timestamp_field] = datetime.fromtimestamp(float(f))
             
         self.get_config() # to ensure query_filter is imported
         self.query_filter(self.request, kind, query)
@@ -169,8 +169,6 @@ class Rocket(webapp.RequestHandler):
         for update in updates:
             key_name_or_id = update[key_field]
             
-            logging.fatal("received update: %s(%s)" % (kind, key_name_or_id))
-            
             if key_name_or_id[0] in "0123456789":
                 key = datastore.Key.from_path(kind, int(key_name_or_id)) # KEY ID
                 is_id = True
@@ -193,7 +191,6 @@ class Rocket(webapp.RequestHandler):
                     else:
                         field_config = None
                         
-                    logging.fatal("get_appengine_value %s=%s [%s]" % (field_name, update[field_name], field_config))
                     entity[field_name] = get_appengine_value(update[field_name], field_config)
                     
             datastore.Put(entity)
@@ -220,7 +217,7 @@ def get_sqllite_type(value):
 def get_sqllite_value(value):
     # DATETIME
     if isinstance(value, datetime):
-        return to_iso(value)
+        return time.mktime(value.timetuple())
     
     # BOOL
     elif isinstance(value, bool):
@@ -250,7 +247,7 @@ def get_appengine_value(value, field_config):
     
     type = field_config['type']
     if type == TYPE_DATETIME:
-        return datetime.fromtimestamp(value)
+        return datetime.fromtimestamp(float(value))
         
     elif type == TYPE_INT:
         return int(value)
