@@ -2,6 +2,7 @@ var Rocket = function() {
 	
 	var	KEY = "key",
 		TIMESTAMP = "timestamp",
+		TEXT = "text",
 		IS_DIRTY = "is_dirty",
 		RECEIVE = "receive",
 		SEND = "send";
@@ -36,7 +37,7 @@ var Rocket = function() {
 		
 	
 
-	function init(_settings) {		
+	function init(_settings, callback) {		
 		merge(_settings, settings);
 
 		if (settings.DATABASE) {
@@ -45,18 +46,26 @@ var Rocket = function() {
 			db = openDatabase(settings.DATABASE_NAME, "", "", 1024*1024);
 		}
 		
-		// init tables
+		// init tables - setup callback chain
+		var initChain = callback?callback:function() {};		
 		var tables = settings.TABLES;
-		for (tableName in tables) {
-			var table = copy(tableTemplate);
-			merge(tables[tableName], table);
-			settings.TABLES[tableName] = table;
-			                  
-			table.TABLE_NAME = tableName;			
-
-			initTable(table);
+		var tablesArray = [];
+		for (var tableName in tables) {
+			var extendInitChain = function(tableName, currentInitChain) {
+				return function() {
+					var table = copy(tableTemplate);
+					merge(tables[tableName], table);
+					tables[tableName] = table;					                  
+					table.TABLE_NAME = tableName;
+					initTable(table, currentInitChain);
+				}
+			}
+			
+			initChain = extendInitChain(tableName, initChain);
 		}		
-		
+
+		// trigger init chain
+		initChain();
 	}
 	
 	
@@ -126,15 +135,15 @@ var Rocket = function() {
 	/**
 	 * Initializes table synchronization.
 	 */
-	function initTable(table) {
-		var tableName = table.TABLE_NAME;
+	function initTable(table, callback) {
+		var tableName = table.TABLE_NAME,
+			parsedFields = {};
+		
 		settings.LOG("initTable: " + tableName);
 		
 		transaction(function(t) {
 			
 			executeSql(t, "select * from SQLITE_MASTER where TYPE = 'table' and name = ?",  [tableName], function(t, rs) {
-				
-	    		table.fields = {};
 
 		    	if (rs.rows.length) {
 		            // table exist - parse columns	                
@@ -145,22 +154,44 @@ var Rocket = function() {
 		    			var field = fields[i].trim().split(" ");
 		    			
 		    			if (field[0] != IS_DIRTY) {
-		    				table.fields[field[0]] = field[1];
+		    				parsedFields[field[0]] = field[1];
 		    			}
 		    			
-		    			settings.LOG("initTable: " + tableName + "." + field[0] + "=" + field[1]);
+		    			settings.LOG("initTable: added column from table " + tableName + "." + field[0] + "=" + field[1]);
 		    		}		    		
 		    		
 		    	} else {
     	    		settings.LOG("initTable: creating new table " + tableName);
 		    		executeSql(t, "create table " + tableName + " (" + KEY + " text primary key, " + IS_DIRTY + " integer default 1)", []);
-		    		table.fields[key] = TEXT;
-		    	}
-		    			    	
-		    	syncNow(tableName);
+		    		parsedFields[KEY] = TEXT;
+		    	}		    	
 		    }); 
 			
-		});		
+		}, function() {
+			
+			transaction(function(t) {
+		    	
+		    	if (table.FIELDS) {
+		    		for (var fieldName in table.FIELDS) {
+		    			if (!(fieldName in parsedFields)) {
+            				settings.LOG("initTable: adding column to table " + tableName + "." + fieldName + "=" + table.FIELDS[fieldName]);
+            				executeSql(t, "alter table " + tableName + " add " + fieldName + " " + table.FIELDS[fieldName]);    		    				
+		    			}
+		    		}
+		    		
+		    		merge(table.FIELDS, parsedFields)
+		    	}
+		    	
+		    	table.FIELDS = parsedFields;
+        		
+			}, function() {
+				// success, table structure has been synchronized, now synchronize data
+				syncNow(tableName);
+				
+				// and invoke callback
+				callback();
+			});			
+		});
 	}
 	
 		
@@ -296,7 +327,7 @@ var Rocket = function() {
 				                		for (fieldName in update) {
 				                			var value = update[fieldName];
 				                			
-				                			if (!(fieldName in table.fields) && fieldName != TIMESTAMP) {
+				                			if (!(fieldName in table.FIELDS) && fieldName != TIMESTAMP) {
 				                				var type;
 				                				if (typeof value == "number") {
 				                					type = "numeric";
@@ -306,7 +337,7 @@ var Rocket = function() {
 				                					
 				                				settings.LOG(ctx + "Adding field " + fieldName + " of type " + type);
 				                				executeSql(t, "alter table " + tableName + " add " + fieldName + " " + type);
-				                				table.fields[fieldName] = type;
+				                				table.FIELDS[fieldName] = type;
 				                			}
 				                		}
 				                		
@@ -451,7 +482,23 @@ var Rocket = function() {
 		});
 	};
 	
+
 	
+	/**
+	 * UUID generator based on random numbers.
+	 * If idPrefix is true, UUID is prefixed with "ID-". This is useful for example for Google App Engine which will 
+	 * choke if key name starts with a number. 
+	 * Snippet from http://stackoverflow.com/questions/105034/how-to-create-a-guid-uuid-in-javascript/2117523#2117523
+	 */
+	function generateUUID(idPrefix) {
+		// 
+		return ((idPrefix?"ID-":"") + ('xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) { 
+		    var r = Math.random()*16|0, v = c == 'x' ? r : (r&0x3|0x8);
+		    return v.toString(16);
+		})).toUpperCase());
+	}
+		
+
 	
 	return {
 		init: init,
@@ -460,6 +507,7 @@ var Rocket = function() {
 		syncNow: syncNow,
 		transaction: transaction,
 		executeSql: executeSql,
+		generateUUID: generateUUID
 	};
 	
 }();
