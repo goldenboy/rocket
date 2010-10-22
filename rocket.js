@@ -10,6 +10,7 @@ var Rocket = function() {
 	
 	
 	var settings = {
+			ROCKET_URL: "/rocket",
 			TABLES: {},
 			DATABASE_NAME: "rocket",
 			LOG: function(m) {
