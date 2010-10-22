@@ -42,6 +42,8 @@ KEY = "key"
 TIMESTAMP = "timestamp"
 IS_DIRTY = "is_dirty"
 
+ENTITIES = "entities"
+
 
 
 class Rocket(webapp.RequestHandler):
@@ -49,7 +51,10 @@ class Rocket(webapp.RequestHandler):
     def get_config(self):
         if not hasattr(self, "config"):
             rocket_yaml = os.path.join(os.path.dirname(os.path.dirname(__file__)), "rocket.yaml")
-            self.config = yaml.load(file(rocket_yaml, "r"))
+            try:
+                self.config = yaml.load(file(rocket_yaml, "r"))
+            except IOError:
+                self.config = {ENTITIES: {},}
             
             def import_filter(type):
                 if self.config.has_key(type):                
@@ -68,7 +73,8 @@ class Rocket(webapp.RequestHandler):
                     except Exception, e:
                         raise Exception("Config error: cannot import %s - %s" % (type, e.message))
                 else:
-                    raise Exception("Config error: %s must be specified" % type)    
+                    logging.info("%s is not configured" % type)
+                    return None    
             
             self.query_filter = import_filter("query_filter")
             self.update_filter = import_filter("update_filter")            
@@ -101,7 +107,11 @@ class Rocket(webapp.RequestHandler):
         keys_in = set()
         updates_in = json.loads(self.request.get("updates"))
         
-        entity_config = self.get_config()["entities"][kind]
+        entities = self.get_config()[ENTITIES]
+        if entities.has_key(kind):
+            entity_config = entities[kind]
+        else:
+            entity_config = {}
         
         for update in updates_in:
             key_name_or_id = update[KEY]
@@ -118,9 +128,10 @@ class Rocket(webapp.RequestHandler):
             try: 
                 entity = datastore.Get(key)
 
-                if not self.update_filter(self.request, kind, entity):
-                    logging.error("update on existing entity is filter, key: %s" % key_name_or_id)
-                    continue
+                if self.self.update_filter:
+                    if not self.update_filter(self.request, kind, entity):
+                        logging.error("update on existing entity is filter, key: %s" % key_name_or_id)
+                        continue
                     
             except datastore_errors.EntityNotFoundError:
                 if is_id:
@@ -145,9 +156,10 @@ class Rocket(webapp.RequestHandler):
             # update timestamp to current time so that it get's picked up by other clients
             entity[TIMESTAMP] = datetime.datetime.now()                                    
 
-            if not self.update_filter(self.request, kind, entity):
-                logging.error("updated entity is filtered, key: %s" % key_name_or_id)
-                continue
+            if self.update_filter:
+                if not self.update_filter(self.request, kind, entity):
+                    logging.error("updated entity is filtered, key: %s" % key_name_or_id)
+                    continue
                     
             datastore.Put(entity)
             
@@ -164,7 +176,8 @@ class Rocket(webapp.RequestHandler):
         if f: 
             query['%s >= ' % TIMESTAMP] = datetime_from_iso(f)
             
-        self.query_filter(self.request, kind, query)
+        if self.query_filter:
+            self.query_filter(self.request, kind, query)
     
         query.Order(TIMESTAMP)
         
@@ -224,8 +237,11 @@ def appengine_to_js_value(value):
 
 
 def js_to_appengine_value(value, attr_config):
-    if not value or not attr_config:
+    if not value:
         return None
+    
+    if not attr_config:
+        return value
     
     type = attr_config['type']
     if type == DATETIME:
