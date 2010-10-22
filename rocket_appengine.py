@@ -21,7 +21,8 @@ from google.appengine.api import datastore, datastore_types, datastore_errors
 from google.appengine.ext import webapp
 from google.appengine.ext.webapp.util import run_wsgi_app
 
-import json, yaml
+from django.utils import simplejson as json
+import yaml
 
 
 
