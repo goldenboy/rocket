@@ -128,7 +128,7 @@ class Rocket(webapp.RequestHandler):
             try: 
                 entity = datastore.Get(key)
 
-                if self.self.update_filter:
+                if self.update_filter:
                     if not self.update_filter(self.request, kind, entity):
                         logging.error("update on existing entity is filter, key: %s" % key_name_or_id)
                         continue
