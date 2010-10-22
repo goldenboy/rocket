@@ -47,6 +47,7 @@ var Rocket = function() {
 			db = openDatabase(settings.DATABASE_NAME, "", "", 1024*1024);
 		}
 		
+		
 		// init tables - setup callback chain
 		var initChain = callback?callback:function() {};		
 		var tables = settings.TABLES;
@@ -104,7 +105,7 @@ var Rocket = function() {
 	/**
 	 * Database API helper - implements error handler for "transaction" function
 	 */	
-	function transaction(callback, successCallback) {
+	function trx(callback, successCallback) {
 		var errorCallback = function(e) {
 			settings.LOG_ERROR("Transaction Error: " + e.message);
 		};
@@ -131,6 +132,17 @@ var Rocket = function() {
 		});
 	}
 
+
+	
+	/**
+	 * Database API helper - create transaction and execute SQL in a single call
+	 */	
+	function trxExecuteSql(sql, params, callback) {
+		trx(function(t) {
+			executeSql(t, sql, params, callback);
+		});
+	}
+
 	
 	
 	/**
@@ -142,7 +154,7 @@ var Rocket = function() {
 		
 		settings.LOG("initTable: " + tableName);
 		
-		transaction(function(t) {
+		trx(function(t) {
 			
 			executeSql(t, "select * from SQLITE_MASTER where TYPE = 'table' and name = ?",  [tableName], function(t, rs) {
 
@@ -170,7 +182,7 @@ var Rocket = function() {
 			
 		}, function() {
 			
-			transaction(function(t) {
+			trx(function(t) {
 		    	
 		    	if (table.FIELDS) {
 		    		for (var fieldName in table.FIELDS) {
@@ -265,7 +277,7 @@ var Rocket = function() {
 			var sendCount;
 			var updatesOut = [];
 			
-			transaction(function(t) {
+			trx(function(t) {
 				executeSql(t, sendSql + " limit " + sendTotalCount + "," + sendBatchSize, [], function(t, rs) {
 					sendCount = rs.rows.length;
 					sendTotalCount += sendCount;
@@ -298,7 +310,7 @@ var Rocket = function() {
 			    		// all is ok so far, outbound updates have been posted and inbound updates are ready to be processed 
 			    		
 			    		// mark outbound updates as processed
-						transaction(function(t) {
+						trx(function(t) {
 							for (var updatesOutIndex = 0; updatesOutIndex < sendCount; updatesOutIndex++) {
 								var update = updatesOut[updatesOutIndex];
 								// TODO - probably need some logic to ensure is_dirty doesn't get set below zero
@@ -323,7 +335,7 @@ var Rocket = function() {
 				            		
 				            		settings.LOG(ctx + "Received update, key: " + key);
 	
-				        			transaction(function(t) {
+				        			trx(function(t) {
 				                		// check if we need to add any field
 				                		for (fieldName in update) {
 				                			var value = update[fieldName];
@@ -346,7 +358,7 @@ var Rocket = function() {
 	
 				        				// transaction succeeded, insert or update values	
 				        				
-				        				transaction(function(t) {
+				        				trx(function(t) {
 				        					executeSql(t, "select " + KEY + ", " + IS_DIRTY + " from " + tableName + " where " + KEY + " = ?", [key], function(t, rs) {
 				        						var sql, params = [];
 				        						if (rs.rows.length > 0) {
@@ -472,7 +484,7 @@ var Rocket = function() {
 	function reset(settings) {		
 		db = openDatabase(settings.DATABASE_NAME, "", "", 1024*1024);
 		
-		transaction(function(t) {
+		trx(function(t) {
 			var tables = settings.TABLES;
 			for (var i = 0; i < tables.length; i++) {
 				var table = tables[i];
@@ -506,8 +518,9 @@ var Rocket = function() {
 		reset: reset,
 		db: db,
 		syncNow: syncNow,
-		transaction: transaction,
+		trx: trx,
 		executeSql: executeSql,
+		trxExecuteSql: trxExecuteSql,
 		generateUUID: generateUUID
 	};
 	
