@@ -1,3 +1,12 @@
+/*!
+ * Rocket.js v0.1
+ * http://kaspa.rs/rocket/
+ *
+ * Copyright 2010 Kaspars Dancis
+ * Licensed under the Apache License, Version 2.0 .
+ * http://www.apache.org/licenses/LICENSE-2.0
+ */
+
 var Rocket = function() {
 	
 	var	KEY = "key",
